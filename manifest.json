@@ -1,0 +1,46 @@
+{
+  "manifest_version": 3,
+  "name": "小燕子翻译助手",
+  "version": "1.0",
+  "description": "一个友好的英语翻译助手，帮助你快速查看单词含义",
+  "icons": {
+    "16": "icon.svg",
+    "48": "icon.svg",
+    "128": "icon.svg"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icon.svg",
+      "48": "icon.svg",
+      "128": "icon.svg"
+    }
+  },
+  "permissions": [
+    "storage",
+    "activeTab",
+    "alarms"
+  ],
+  "host_permissions": [
+    "http://localhost:3366/*",
+    "https://api.mymemory.translated.net/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "css": ["styles.css"],
+      "run_at": "document_idle",
+      "all_frames": true
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["styles.css", "icon.svg"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  }
+}

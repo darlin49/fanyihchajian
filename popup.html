@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    /* 添加新的样式 */
+    .word-item {
+      padding: 10px;
+      border-bottom: 1px solid #eee;
+    }
+    .word-details {
+      margin-top: 5px;
+      font-size: 0.9em;
+      color: #666;
+    }
+    .accent {
+      color: #888;
+      font-style: italic;
+    }
+    .example {
+      margin-top: 5px;
+      padding-left: 10px;
+      border-left: 2px solid #ddd;
+    }
+  </style>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <div class="search-section">
+      <input type="text" id="wordInput" placeholder="输入要查询的单词">
+      <button id="searchBtn">查询</button>
+    </div>
+    
+    <div class="word-list-section">
+      <h3>已保存的单词</h3>
+      <div id="wordList"></div>
+    </div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html> 
