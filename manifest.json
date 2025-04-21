@@ -17,13 +17,11 @@
     }
   },
   "permissions": [
-    "storage",
-    "activeTab",
-    "alarms"
+    "activeTab"
   ],
   "host_permissions": [
-    "http://localhost:3366/*",
-    "https://api.mymemory.translated.net/*"
+    "http://localhost:8080/*",
+    "https://localhost:8080/*"
   ],
   "content_scripts": [
     {
@@ -41,6 +39,7 @@
     }
   ],
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "background.js",
+    "type": "module"
   }
 }

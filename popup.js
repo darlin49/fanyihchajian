@@ -1,157 +1,96 @@
-document.addEventListener('DOMContentLoaded', function() {
-  // 初始化时加载单词列表
-  getWordList();
+/**
+ * popup.js
+ * 扩展弹出窗口的主要功能实现
+ */
 
-  // 添加查询按钮事件监听
+/**
+ * 当DOM加载完成后初始化弹出窗口
+ */
+document.addEventListener('DOMContentLoaded', function() {
+  // 为查询按钮添加点击事件监听器
   document.getElementById('searchBtn').addEventListener('click', async () => {
     const word = document.getElementById('wordInput').value.trim();
     if (word) {
-      // 获取翻译
       const translation = await translateWord(word);
       if (translation) {
-        // 保存单词和翻译
-        await saveWord(word, translation);
+        showNotification('查询成功！');
+        document.getElementById('wordInput').value = ''; // 清空输入框
       }
     }
   });
 });
 
-// 翻译单词函数
+/**
+ * 翻译单词的主要函数
+ * @param {string} word - 需要翻译的单词
+ * @returns {Promise<Object|null>} 翻译结果对象
+ */
 async function translateWord(word) {
   try {
-    // 通过 background.js 发送请求
-    const response = await chrome.runtime.sendMessage({
-      type: 'LOOKUP_WORD',
-      word: word
+    // 直接发送请求到后端服务器
+    const response = await fetch('http://localhost:8080/api', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ word: word })
     });
 
-    if (response.success) {
-      const data = response.data;
-      return {
-        translation: data.data.translation,
-        accent: data.data.accent,
-        example: data.data.example,
-        example_trans: data.data.example_trans,
-        source: data.source
-      };
+    const result = await response.json();
+    
+    if (result.code === 200 && result.data) {
+      displayTranslation(result.data);
+      return result.data;
+    } else {
+      throw new Error(result.message || '查询失败');
     }
-
-    // 本地没有找到，使用 MyMemory API
-    return fallbackTranslate(word);
   } catch (error) {
     console.error('翻译失败:', error);
-    return fallbackTranslate(word);
-  }
-}
-
-// 回退翻译方案
-async function fallbackTranslate(word) {
-  try {
-    const response = await fetch(`https://api.mymemory.translated.net/get?q=${word}&langpair=en|zh`);
-    const data = await response.json();
-    if (data.responseStatus === 200) {
-      return {
-        translation: data.responseData.translatedText,
-        accent: '',
-        mean_en: '',
-        sentence: '',
-        sentence_trans: ''
-      };
-    }
-    return null;
-  } catch (error) {
-    console.error('回退翻译失败:', error);
+    showNotification('查询失败，请稍后重试');
     return null;
   }
 }
 
-// 保存单词到数据库
-async function saveWord(word, translation) {
-  try {
-    const response = await chrome.runtime.sendMessage({
-      type: 'SAVE_TRANSLATION',
-      word,
-      translation
-    });
-
-    if (response.success) {
-      showNotification('单词已保存！');
-      getWordList(); // 刷新列表
-      document.getElementById('wordInput').value = ''; // 清空输入框
-    } else {
-      throw new Error(response.error || '保存失败');
-    }
-  } catch (error) {
-    console.error('保存单词失败:', error);
-    showNotification('保存失败，请稍后重试');
-  }
-}
-
-// 获取单词列表
-async function getWordList() {
-  try {
-    const response = await chrome.runtime.sendMessage({
-      type: 'GET_TRANSLATIONS'
-    });
-
-    if (response.success) {
-      displayWords(response.data);
-    } else {
-      throw new Error(response.error || '获取列表失败');
-    }
-  } catch (error) {
-    console.error('获取单词列表失败:', error);
-    showNotification('获取列表失败，请稍后重试');
-  }
-}
-
-// 显示单词列表
-function displayWords(words) {
+/**
+ * 显示翻译结果
+ * @param {Object} data - 翻译数据
+ */
+function displayTranslation(data) {
   const wordList = document.getElementById('wordList');
-  wordList.innerHTML = '';
-  words.forEach(word => {
-    const div = document.createElement('div');
-    div.className = 'word-item';
-    div.innerHTML = `
-      <span class="word">${word.word}</span>
-      <span class="translation">${word.translation}</span>
-      <button class="delete-btn" data-id="${word.id}">删除</button>
-    `;
-    
-    // 添加删除功能
-    div.querySelector('.delete-btn').addEventListener('click', async () => {
-      await deleteWord(word.id);
-    });
-    
-    wordList.appendChild(div);
-  });
+  wordList.innerHTML = ''; // 清空现有内容
+  
+  const div = document.createElement('div');
+  div.className = 'word-item';
+  
+  // 格式化显示内容
+  const content = `
+    <div class="word-header">
+      <span class="word">${data.word}</span>
+      <span class="symbols">[${data.symbols}]</span>
+    </div>
+    <div class="word-meaning">
+      <span class="part">${data.part}</span>
+      <span class="mean">${data.mean}</span>
+    </div>
+    <div class="word-example">
+      <div class="example">${data.ex}</div>
+      <div class="translation">${data.tran}</div>
+    </div>
+  `;
+  
+  div.innerHTML = content;
+  wordList.appendChild(div);
 }
 
-// 删除单词
-async function deleteWord(id) {
-  try {
-    const response = await chrome.runtime.sendMessage({
-      type: 'DELETE_TRANSLATION',
-      id
-    });
-
-    if (response.success) {
-      getWordList(); // 刷新列表
-      showNotification('删除成功');
-    } else {
-      throw new Error(response.error || '删除失败');
-    }
-  } catch (error) {
-    console.error('删除单词失败:', error);
-    showNotification('删除失败，请稍后重试');
-  }
-}
-
-// 显示通知
+/**
+ * 显示临时通知消息
+ * @param {string} message - 要显示的消息内容
+ */
 function showNotification(message) {
   const notification = document.createElement('div');
   notification.className = 'notification';
   notification.textContent = message;
+  
   document.body.appendChild(notification);
   
   setTimeout(() => {
