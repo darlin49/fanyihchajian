@@ -13,6 +13,7 @@
   min-width: 200px !important;
   word-wrap: break-word !important;
   animation: xyz-fade-in 0.2s !important;
+  -webkit-user-select: text !important;
   user-select: text !important;
   pointer-events: auto !important;
   border: 1px solid rgba(0, 0, 0, 0.1) !important;
