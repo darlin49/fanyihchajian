@@ -101,8 +101,8 @@ async function handleTextSelection(e) {
     // 标记正在翻译中
     isTranslating = true;
     
-    // 首先显示加载中状态
-    showTranslationPopup("正在查询中...", e.pageX, e.pageY);
+    // 首先显示加载中状态，不再传递鼠标位置
+    showTranslationPopup("正在查询中...");
     
     // 获取翻译结果
     const translation = await getTranslation(validatedText);
@@ -113,10 +113,8 @@ async function handleTextSelection(e) {
     }
   } catch (error) {
     console.error('翻译错误:', error);
-    // 即使出错也显示弹窗，并显示错误信息
     updatePopupContent(validatedText);
   } finally {
-    // 无论成功与否，都将翻译状态重置
     isTranslating = false;
   }
 }
@@ -130,8 +128,14 @@ function updatePopupContent(content) {
   
   const contentDiv = translationPopup.querySelector('.xyz-popup-content');
   if (contentDiv) {
-    contentDiv.style.whiteSpace = 'pre-line';
-    contentDiv.textContent = content;
+    if (content.startsWith('<div')) {
+      // HTML 内容
+      contentDiv.innerHTML = content;
+    } else {
+      // 纯文本内容
+      contentDiv.style.whiteSpace = 'pre-line';
+      contentDiv.textContent = content;
+    }
   }
 }
 
@@ -144,7 +148,7 @@ async function getTranslation(text) {
   try {
     console.log('发送翻译请求:', text);
 
-    const response = await fetch('http://localhost:8080/api/world/test', {
+    const response = await fetch('http://localhost:8080/api/world', {
       method: 'POST',
       headers: {
        'Content-Type': 'application/json',
@@ -178,21 +182,62 @@ async function getTranslation(text) {
  */
 function formatTranslation(data) {
   try {
-    if (!data) return '无数据';
+    if (!data || !Array.isArray(data) || data.length === 0) return '无数据';
 
-    // 只显示词性和释义
-    if (data.part && data.mean) {
-      // 使用数组和join来确保换行
-      const lines = [
-        data.part,
-        ...data.mean.split(';')
-          .filter(m => m.trim())
-          .map(m => m.trim() + ';')
-      ];
-      return lines.join('\n');
+    // 多个结果时使用水平布局
+    let content = '<div style="display: flex; gap: 20px;">';
+    
+    // 遍历每个结果创建列
+    for (const result of data) {
+      if (result.word && result.mean) {
+        let meanText = result.mean;
+        
+        // 定义所有可能的词性标记，按长度降序排列
+        const partOfSpeech = [
+          'pron.', 'prep.', 'conj.', 'adv.', 'adj.', 'aux.', 'art.', 'int.', 'num.', 
+          'vt.', 'vi.', 'v.', 'n.'
+        ].sort((a, b) => b.length - a.length);
+        
+        // 为每个词性标记添加换行
+        partOfSpeech.forEach(mark => {
+          // 使用正则表达式确保只替换词性标记本身，而不是单词中的部分
+          const regex = new RegExp(`(?<!\\w)${mark.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'g');
+          meanText = meanText.replace(regex, `\n${mark}\n`);
+        });
+        
+        // 分割成行并清理
+        let lines = meanText.split('\n')
+          .map(line => line.trim())
+          .filter(line => line)  // 移除空行
+          .map(line => {
+            // 如果这行不是词性标记，进行额外处理
+            if (!partOfSpeech.some(mark => line.startsWith(mark))) {
+              return line
+                .replace(/[;；]/g, '、')  // 将分号统一为顿号
+                .replace(/[,，]/g, '、')  // 将逗号统一为顿号
+                .replace(/\s*、\s*/g, '、')  // 规范化顿号前后的空格
+                .replace(/\s+/g, ' ')  // 规范化空格
+                .replace(/^[、\s]+|[、\s]+$/g, '');  // 移除首尾多余的顿号和空格
+            }
+            return line;
+          });
+
+        content += `
+          <div style="flex: 1;">
+            <div style="font-weight: bold; font-size: 16px;">${result.word}</div>
+            <div style="display: flex; flex-direction: column; gap: 5px;">
+              ${lines.map(line => {
+                // 判断是否是词性标记
+                const isPartOfSpeech = partOfSpeech.some(mark => line.startsWith(mark));
+                return `<div style="${isPartOfSpeech ? 'color: #666;' : ''}">${line}</div>`;
+              }).join('')}
+            </div>
+          </div>`;
+      }
     }
-
-    return '无数据';
+    
+    content += '</div>';
+    return content;
   } catch (error) {
     console.error('格式化翻译数据出错:', error);
     return JSON.stringify(data);
@@ -200,12 +245,43 @@ function formatTranslation(data) {
 }
 
 /**
+ * 获取元素的绝对位置
+ * @param {Element} element - 目标元素
+ * @returns {Object} - 包含 top 和 left 的位置信息
+ */
+function getAbsolutePosition(element) {
+  const rect = element.getBoundingClientRect();
+  const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+  const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+  
+  // 获取所有父级滚动容器的滚动位置
+  let parent = element.parentElement;
+  let additionalScrollTop = 0;
+  let additionalScrollLeft = 0;
+  
+  while (parent) {
+    if (parent.scrollHeight > parent.clientHeight || parent.scrollWidth > parent.clientWidth) {
+      additionalScrollTop += parent.scrollTop;
+      additionalScrollLeft += parent.scrollLeft;
+    }
+    parent = parent.parentElement;
+  }
+  
+  return {
+    top: rect.top + scrollTop + additionalScrollTop,
+    left: rect.left + scrollLeft + additionalScrollLeft,
+    bottom: rect.bottom + scrollTop + additionalScrollTop,
+    right: rect.right + scrollLeft + additionalScrollLeft,
+    width: rect.width,
+    height: rect.height
+  };
+}
+
+/**
  * 显示翻译结果弹窗
  * @param {string} translation - 翻译结果
- * @param {number} mouseX - 鼠标X坐标
- * @param {number} mouseY - 鼠标Y坐标
  */
-function showTranslationPopup(translation, mouseX, mouseY) {
+function showTranslationPopup(translation) {
   // 移除已存在的弹窗
   removePopup();
 
@@ -216,7 +292,7 @@ function showTranslationPopup(translation, mouseX, mouseY) {
   // 创建标题区域
   const titleDiv = document.createElement('div');
   titleDiv.className = 'xyz-popup-title';
-  titleDiv.innerHTML = `小燕子（已过四级）<br>来告诉你什么意思：`;
+  titleDiv.innerHTML = `让我<br>来告诉你什么意思：`;
   
   // 创建翻译内容区域
   const contentDiv = document.createElement('div');
@@ -234,29 +310,67 @@ function showTranslationPopup(translation, mouseX, mouseY) {
   translationPopup.appendChild(contentDiv);
   translationPopup.appendChild(closeButton);
 
-  // 将弹窗添加到页面
-  document.body.appendChild(translationPopup);
-
   // 获取选中文本的位置信息
   const selection = window.getSelection();
   const range = selection.getRangeAt(0);
-  const rect = range.getBoundingClientRect();
-
-  // 计算弹窗位置
-  const viewportWidth = window.innerWidth;
-  const viewportHeight = window.innerHeight;
-  const scrollX = window.pageXOffset || document.documentElement.scrollLeft;
-  const scrollY = window.pageYOffset || document.documentElement.scrollTop;
   
+  // 获取选中文本所在的元素
+  const selectedElement = range.startContainer.parentElement;
+  
+  // 获取选中文本的绝对位置
+  const absoluteRect = getAbsolutePosition(selectedElement);
+  const rangeRect = range.getBoundingClientRect();
+  
+  // 先将弹窗添加到页面但隐藏
+  document.body.appendChild(translationPopup);
+  translationPopup.style.visibility = 'hidden';
+  
+  // 获取弹窗尺寸
   const popupRect = translationPopup.getBoundingClientRect();
   
-  // 设置弹窗的默认位置（在选中文本的下方）
-  let left = rect.left + scrollX;
-  let top = rect.bottom + scrollY + 10; // 在选中文本下方10px的位置
+  // 计算最佳位置
+  const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
   
+  // 初始位置设置（相对于选中文本）
+  let left = rangeRect.left;
+  let top = rangeRect.bottom + 10;
+  
+  // 考虑父容器的滚动位置
+  let scrollContainer = selectedElement.closest('.overflow-auto, .overflow-scroll, [style*="overflow"]');
+  if (scrollContainer) {
+    const containerRect = scrollContainer.getBoundingClientRect();
+    // 确保弹窗不会超出滚动容器的可视区域
+    if (top + popupRect.height > containerRect.bottom) {
+      top = rangeRect.top - popupRect.height - 10;
+    }
+    if (left + popupRect.width > containerRect.right) {
+      left = containerRect.right - popupRect.width - 10;
+    }
+  }
+  
+  // 确保弹窗在视口内
+  if (left + popupRect.width > viewportWidth) {
+    left = viewportWidth - popupRect.width - 10;
+  }
+  if (left < 0) {
+    left = 10;
+  }
+  
+  if (top + popupRect.height > viewportHeight) {
+    top = rangeRect.top - popupRect.height - 10;
+    if (top < 0) {
+      top = Math.min((viewportHeight - popupRect.height) / 2, rangeRect.top - 10);
+    }
+  }
+  if (top < 0) {
+    top = 10;
+  }
+
   // 设置弹窗位置
   translationPopup.style.left = `${left}px`;
   translationPopup.style.top = `${top}px`;
+  translationPopup.style.visibility = 'visible';
 
   // 处理点击页面其他区域时关闭弹窗
   document.addEventListener('mousedown', handleOutsideClick);

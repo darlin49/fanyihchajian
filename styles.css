@@ -1,6 +1,6 @@
 /* 翻译弹窗 */
 .xyz-popup {
-  position: absolute !important;
+  position: fixed !important;
   z-index: 2147483647 !important;
   background: #fff !important;
   color: #333 !important;
@@ -18,6 +18,12 @@
   pointer-events: auto !important;
   border: 1px solid rgba(0, 0, 0, 0.1) !important;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+  transform: translate3d(0, 0, 0) !important;
+  will-change: transform, top, left !important;
+  backface-visibility: hidden !important;
+  -webkit-font-smoothing: antialiased !important;
+  margin: 0 !important;
+  isolation: isolate !important;
 }
 
 /* 弹窗标题 */
